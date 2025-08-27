@@ -5831,7 +5831,25 @@ vu dans <!DOCTYPE html>
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ type: searchType, query })
                 });
-                const apiData = await resp.json();
+
+                // Read body as text first so we can handle HTML error pages (404 HTML etc.)
+                const rawText = await resp.text();
+                let apiData = null;
+                if (!resp.ok) {
+                    // Server returned an error page (likely HTML) — don't attempt to parse as JSON
+                    console.error('Search API returned error:', resp.status, rawText);
+                    showNotification(`Erreur réseau: ${resp.status}. Voir console pour détails.`, 'error');
+                    logAction('Home Page Quick Search Network Error', { query, status: resp.status, bodyPreview: rawText.slice(0,300) }, 'error');
+                    return;
+                }
+                try {
+                    apiData = JSON.parse(rawText === '' ? '{}' : rawText);
+                } catch (err) {
+                    console.error('Invalid JSON from search API:', rawText);
+                    showNotification('Réponse invalide du serveur de recherche. Voir console pour détails.', 'error');
+                    logAction('Home Page Quick Search Parse Error', { query, error: err.message, bodyPreview: rawText.slice(0,300) }, 'error');
+                    return;
+                }
 
                 const formattedResults = [];
                 let title = `Résultats pour "${query}"`;
