@@ -1,0 +1,39 @@
+.breach-details {
+    margin: 10px 0;
+}
+
+.breach-details p {
+    margin: 5px 0;
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.password-field {
+    background: #ff4444;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+.raw-data {
+    margin-top: 15px;
+}
+
+.raw-data summary {
+    cursor: pointer;
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.raw-data pre {
+    background: #1a1a1a;
+    color: #00ff00;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+    margin-top: 10px;
+}

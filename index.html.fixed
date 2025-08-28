@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Intelligence - OSINT Professionnelle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Styles de base */
+        :root {
+            --primary-color: #0a0a0a;
+            --secondary-color: #1a1a1a;
+            --accent-color: #8a2be2;
+            --danger-color: #cc0000;
+            --success-color: #008000;
+            --warning-color: #ff8c00;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --purple: #9370db;
+            --cyan: #4b0082;
+            --pink: #800080;
+            --orange: #483d8b;
+        }
+
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .modal.hidden {
+            display: none;
+            opacity: 0;
+        }
+
+        .modal-content {
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid var(--accent-color);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            animation: modalAppear 0.3s ease-out;
+        }
+
+        @keyframes modalAppear {
+            from {
+                transform: scale(0.9);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        /* Autres styles... */
+    </style>
+</head>
+<body>
+    <!-- Structure HTML existante... -->
+
+    <script>
+        // Fonction améliorée pour la gestion des modales
+        class ModalManager {
+            constructor() {
+                this.activeModal = null;
+                this.setupGlobalListeners();
+            }
+
+            setupGlobalListeners() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.activeModal) {
+                        this.closeModal(this.activeModal);
+                    }
+                });
+            }
+
+            openModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (!modal) return;
+
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+                modal.style.opacity = '1';
+                this.activeModal = modal;
+
+                // Click outside to close
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        this.closeModal(modal);
+                    }
+                });
+            }
+
+            closeModal(modal) {
+                if (!modal) return;
+
+                modal.style.opacity = '0';
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.style.display = 'none';
+                    if (modal === this.activeModal) {
+                        this.activeModal = null;
+                    }
+                }, 300);
+            }
+        }
+
+        // Instance globale du gestionnaire de modales
+        const modalManager = new ModalManager();
+
+        // Fonction améliorée d'affichage des résultats
+        function displaySearchResults(title) {
+            console.log('Affichage des résultats:', { title, resultCount: currentSearchResults?.length });
+            
+            if (window.isInitializing || !currentSearchResults?.length) {
+                showNotification('ℹ️ Aucun résultat à afficher', 'info');
+                return;
+            }
+            
+            try {
+                const elements = {
+                    modal: document.getElementById('searchResultsModal'),
+                    title: document.getElementById('searchResultsTitle'),
+                    body: document.getElementById('searchResultsBody'),
+                    pageInfo: document.getElementById('currentPageInfo'),
+                    prevBtn: document.getElementById('prevPageBtn'),
+                    nextBtn: document.getElementById('nextPageBtn'),
+                    closeBtn: document.getElementById('closeModalBtn')
+                };
+
+                // Vérification des éléments
+                Object.entries(elements).forEach(([key, el]) => {
+                    if (!el) throw new Error(`Élément manquant: ${key}`);
+                });
+
+                // Mise à jour du contenu
+                elements.title.textContent = title;
+                elements.body.innerHTML = '';
+
+                // Pagination
+                const startIndex = (currentPage - 1) * resultsPerPage;
+                const endIndex = Math.min(startIndex + resultsPerPage, currentSearchResults.length);
+                const totalPages = Math.ceil(currentSearchResults.length / resultsPerPage);
+                
+                // Mise à jour de la pagination
+                elements.pageInfo.textContent = `Page ${currentPage} sur ${totalPages}`;
+                elements.prevBtn.disabled = currentPage <= 1;
+                elements.nextBtn.disabled = currentPage >= totalPages;
+
+                // Affichage des résultats
+                const currentResults = currentSearchResults.slice(startIndex, endIndex);
+                currentResults.forEach(result => {
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = 'mb-4 p-4 rounded-lg glass-effect hover:bg-opacity-75 transition-all';
+                    resultDiv.innerHTML = `<pre class="whitespace-pre-wrap font-mono text-sm">${result}</pre>`;
+                    elements.body.appendChild(resultDiv);
+                });
+
+                // Ouverture de la modale
+                modalManager.openModal('searchResultsModal');
+
+            } catch (error) {
+                console.error('Erreur d\'affichage:', error);
+                showNotification('❌ Erreur: ' + error.message, 'error');
+                logAction('Display Error', { error: error.message }, 'error');
+            }
+        }
+
+        // Fonction améliorée de changement de page
+        function changePage(direction) {
+            try {
+                if (!currentSearchResults?.length) {
+                    throw new Error('Aucun résultat à paginer');
+                }
+
+                const totalPages = Math.ceil(currentSearchResults.length / resultsPerPage);
+                const newPage = currentPage + direction;
+
+                if (newPage < 1 || newPage > totalPages) {
+                    throw new Error('Page hors limites');
+                }
+
+                currentPage = newPage;
+                
+                const resultsBody = document.getElementById('searchResultsBody');
+                if (resultsBody) {
+                    resultsBody.style.opacity = '0';
+                    setTimeout(() => {
+                        const title = document.getElementById('searchResultsTitle')?.textContent || 'Résultats de Recherche';
+                        displaySearchResults(title);
+                        resultsBody.style.opacity = '1';
+                    }, 150);
+                }
+
+            } catch (error) {
+                console.error('Erreur de pagination:', error);
+                showNotification('❌ ' + error.message, 'error');
+                logAction('Pagination Error', { error: error.message }, 'error');
+            }
+        }
+
+        // Fonction de fermeture de la modale
+        function closeSearchResultsModal() {
+            const modal = document.getElementById('searchResultsModal');
+            if (modal) {
+                modalManager.closeModal(modal);
+                currentSearchResults = [];
+                currentPage = 1;
+                logAction('Modal Closed', { type: 'search_results' }, 'info');
+            }
+        }
+
+        // Initialisation des écouteurs d'événements
+        document.addEventListener('DOMContentLoaded', function() {
+            const closeBtn = document.getElementById('closeModalBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeSearchResultsModal);
+            }
+        });
+
+        // Code existant...
+    </script>
+</body>
+</html>

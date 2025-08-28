@@ -1,0 +1,287 @@
+const express = require('express');
+const axios = require('axios');
+const path = require('path');
+const nodemailer = require('nodemailer');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const sqlite3 = require('sqlite3').verbose();
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware pour parser le JSON
+app.use(express.json());
+
+// Servir les fichiers statiques
+app.use(express.static(path.join(__dirname)));
+
+// Middleware d'authentification simple
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ success: false, message: 'Access token required' });
+    }
+    
+    // Dans un vrai projet, vous valideriez le JWT ici
+    // Pour cette démo, on accepte tous les tokens non-vides
+    if (token === 'fake-jwt-token') { // This should be replaced with actual JWT verification
+        next();
+    } else {
+        res.status(403).json({ success: false, message: 'Invalid token' });
+    }
+};
+
+// Configuration Nodemailer pour l'envoi d'emails
+const emailTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER || 'your-email@gmail.com',
+        pass: process.env.EMAIL_PASS || 'your-app-password'
+    }
+});
+
+// Fonction pour envoyer des emails
+async function sendEmail(to, subject, htmlContent) {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER || 'noreply@breachfr.com',
+            to: to,
+            subject: subject,
+            html: htmlContent
+        };
+        
+        const result = await emailTransporter.sendMail(mailOptions);
+        console.log('Email sent successfully:', result.messageId);
+        return { success: true, messageId: result.messageId };
+    } catch (error) {
+        console.error('Error sending email:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Base de données simulée des utilisateurs
+let users = [
+    { 
+        id: 1,
+        email: 'thankoyes@gmail.com', 
+        password: 'Vbnx1224', 
+        username: 'founder_admin', 
+        role: 'founder', 
+        firstName: 'Founder', 
+        lastName: 'Admin', 
+        plan: 'Enterprise',
+        createdAt: new Date('2024-01-01'),
+        investigations: 500,
+        apiRequests: 100000,
+        dataCollected: 21 * 1024 * 1024,
+        activeAlerts: 5,
+        retentionRate: 95,
+        costPerRequest: 0.01,
+        teamMembers: 4
+    },
+    {
+        id: 2,
+        email: 'admin@breach.fr',
+        password: 'admin123',
+        username: 'admin_user',
+        role: 'admin',
+        firstName: 'Sarah',
+        lastName: 'Martin',
+        plan: 'Professional',
+        createdAt: new Date('2024-01-15'),
+        investigations: 120,
+        apiRequests: 50000,
+        dataCollected: 1200,
+        activeAlerts: 3,
+        retentionRate: 88,
+        costPerRequest: 0.02,
+        teamMembers: 3
+    },
+    {
+        id: 3,
+        email: 'user@example.com',
+        password: 'user123',
+        username: 'regular_user',
+        role: 'user',
+        firstName: 'Marc',
+        lastName: 'Dubois',
+        plan: 'Starter',
+        createdAt: new Date('2024-01-20'),
+        investigations: 30,
+        apiRequests: 5000,
+        dataCollected: 200,
+        activeAlerts: 1,
+        retentionRate: 75,
+        costPerRequest: 0.03,
+        teamMembers: 1
+    }
+];
+
+// Endpoint unifié pour les recherches OathNet
+app.post('/api/search', async (req, res) => {
+    const { query, type = 'breach' } = req.body;
+    if (!query) {
+        return res.status(400).json({
+            success: false,
+            message: 'Un terme de recherche est requis'
+        });
+    }
+
+    const OATHNET_API_KEY = process.env.OATHNET_API_KEY;
+    if (!OATHNET_API_KEY) {
+        console.error('❌ [ERROR] OathNet API Key manquante');
+        return res.status(500).json({
+            success: false,
+            message: 'Configuration du serveur incomplète'
+        });
+    }
+
+    try {
+        // Configuration de base pour l'API OathNet
+        const baseURL = 'https://oathnet.org/api/service/';
+        let endpoint, params;
+
+        // Déterminer le type de recherche
+        switch (type) {
+            case 'breach':
+                endpoint = 'search-breach/';
+                params = { q: query };
+                break;
+            case 'email':
+                endpoint = 'holehe/';
+                params = { email: query };
+                break;
+            case 'domain':
+                endpoint = 'extract-subdomain/';
+                params = { domain: query };
+                break;
+            case 'ip':
+                endpoint = 'ip-info/';
+                params = { ip: query };
+                break;
+            default:
+                return res.status(400).json({
+                    success: false,
+                    message: 'Type de recherche non supporté'
+                });
+        }
+
+        // Construction de l'URL
+        let url = `${baseURL}${endpoint}`;
+        if (params) {
+            const queryString = new URLSearchParams(params).toString();
+            url += `?${queryString}`;
+        }
+
+        console.log(`🔍 [SEARCH] Type: ${type}, Query: ${query}`);
+        console.log('🌐 [REQUEST] Making request to:', url);
+        console.log('🔑 [AUTH] With API Key:', OATHNET_API_KEY.substring(0, 10) + '...');
+
+        const response = await axios.get(url, {
+            headers: {
+                'X-API-Key': OATHNET_API_KEY
+            },
+            timeout: 30000
+        });
+
+        console.log('✅ [SUCCESS] OathNet API response status:', response.status);
+        console.log('📊 [DATA] Response data:', JSON.stringify(response.data, null, 2));
+
+        res.json({
+            success: true,
+            data: response.data
+        });
+
+    } catch (error) {
+        console.error('❌ [ERROR] Error making request to OathNet:', error);
+        
+        if (error.response) {
+            // Erreur avec réponse de l'API
+            res.status(error.response.status).json({
+                success: false,
+                message: error.response.data.message || 'Erreur lors de la recherche',
+                error: error.response.data
+            });
+        } else if (error.request) {
+            // Erreur de réseau
+            res.status(503).json({
+                success: false,
+                message: 'Service temporairement indisponible',
+                error: 'Network error'
+            });
+        } else {
+            // Autre erreur
+            res.status(500).json({
+                success: false,
+                message: 'Erreur interne du serveur',
+                error: error.message
+            });
+        }
+    }
+});
+
+// Routes d'authentification
+app.post('/api/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    
+    const user = users.find(u => (u.email === email || u.username === email) && u.password === password);
+    
+    if (user) {
+        const { password, ...userWithoutPassword } = user;
+        res.json({ 
+            success: true, 
+            message: 'Login successful', 
+            user: userWithoutPassword, 
+            token: 'fake-jwt-token' // Dans un vrai projet, générez un vrai JWT ici
+        });
+    } else {
+        res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+});
+
+app.post('/api/auth/register', (req, res) => {
+    const { firstName, lastName, email, password, username, sector } = req.body;
+    
+    if (users.find(u => u.email === email || u.username === username)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Email or username already exists' 
+        });
+    }
+    
+    const newUser = {
+        id: users.length + 1,
+        email,
+        password, // Dans un vrai projet, hashez le mot de passe
+        username,
+        firstName,
+        lastName,
+        role: 'user',
+        plan: 'Free',
+        sector,
+        createdAt: new Date(),
+        apiRequests: 0,
+        activeAlerts: 0
+    };
+    
+    users.push(newUser);
+    
+    const { password: _, ...userWithoutPassword } = newUser;
+    
+    res.status(201).json({
+        success: true,
+        message: 'Registration successful',
+        user: userWithoutPassword,
+        token: 'fake-jwt-token' // Dans un vrai projet, générez un vrai JWT ici
+    });
+});
+
+// Démarrer le serveur
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log('📧 Email service configured');
+    console.log('🔧 All API endpoints ready');
+});
